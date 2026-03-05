@@ -1,9 +1,17 @@
 import * as THREE from 'three';
 
 var renderer = null;
-var scene    = null;
+var solarScene = null;
 var camera   = null;
-var shape     = null;
+var earth     = null;
+var moon     = null;
+var solar     = null;
+var solarSysGroup = null;
+var solarGroup = null;
+var earthSysGroup = null;
+var earthGroup = null;
+var moonSysGroup = null;
+var moonGroup = null;
 var curTime  = Date.now();
 
 init();
@@ -14,32 +22,74 @@ function init() {
     renderer.setSize( window.innerWidth, window.innerHeight );
     document.body.appendChild(renderer.domElement);
 
-    scene = new THREE.Scene();
+    solarScene = new THREE.Scene();
 
-    camera = new THREE.PerspectiveCamera(45, 800 / 600, 1, 4000);
+    // Caméra reculée pour tout voir
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 4000);
+    camera.position.set(0, 5, 30);
+    camera.lookAt(0, 0, 0);
 
-    //Texture WebGL
-    //var mapUrl = "images/webgl-logo-256.jpg";
-
-    //Texture Terre
-    var mapUrl = "images/earth_atmos_2048.jpg";
-    var map    = new THREE.TextureLoader().load(mapUrl);
-
-    //Sphere
-    var material = new THREE.MeshBasicMaterial({ map: map });
-    var geometry = new THREE.SphereGeometry(1, 32, 32);
-
-    //Cube
-    //var material = new THREE.MeshBasicMaterial({ map: map });
-    //var geometry = new THREE.BoxGeometry(2, 2, 2);
+    // Lumières
+    var sunLight = new THREE.PointLight(0xffff88, 200, 200);  // couleur jaune, intensité 5, distance 30
+    sunLight.position.set(0, 0, 0);
+    solarScene.add(sunLight);
 
 
-    shape = new THREE.Mesh(geometry, material);
-    shape.position.z = -8;
-    shape.rotation.x = Math.PI / 5;
-    shape.rotation.y = Math.PI / 5;
+    // Texture Terre
+    var earthTexture = new THREE.TextureLoader().load("images/earth_atmos_2048.jpg");
 
-    scene.add(shape);
+    // Terre
+    var earthMaterial = new THREE.MeshPhongMaterial({ map: earthTexture });
+    var earthGeometry = new THREE.SphereGeometry(1, 32, 32);
+    earth = new THREE.Mesh(earthGeometry, earthMaterial);
+    earth.position.set(0, 0, 0);
+    earth.rotation.x = Math.PI / 5;
+
+    // Texture Lune
+    var moonTexture = new THREE.TextureLoader().load("images/moon_1024.jpg");
+
+    // Lune
+    var moonMaterial = new THREE.MeshPhongMaterial({ map: moonTexture });
+    var moonGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+    moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    moon.position.set(0, 0, 0);
+
+    // Soleil
+    var solarMaterial = new THREE.MeshBasicMaterial({
+        color: 0xFFFF00,
+        emissive: 0x444400,
+        specular: 0xffffff,
+        shininess: 200
+    });
+    var solarGeometry = new THREE.SphereGeometry(2, 32, 32);
+    solar = new THREE.Mesh(solarGeometry, solarMaterial);
+    solar.position.set(0, 0, 0);
+
+    // Groupes hiérarchiques
+    solarSysGroup = new THREE.Group();
+    solarGroup = new THREE.Group();
+    earthSysGroup = new THREE.Group();
+    earthGroup = new THREE.Group();
+    moonSysGroup = new THREE.Group();
+    moonGroup = new THREE.Group();
+
+    // Hiérarchie
+    solarGroup.add(solarSysGroup);
+    solarSysGroup.add(solar);
+
+    solarSysGroup.add(earthGroup);
+    earthGroup.position.set(12, 0, 0); // Distance Soleil-Terre
+
+    earthGroup.add(earthSysGroup);
+    earthSysGroup.add(earth);
+
+    earthSysGroup.add(moonGroup);
+    moonGroup.position.set(3, 0, 0); // Distance Terre-Lune
+
+    moonGroup.add(moonSysGroup);
+    moonSysGroup.add(moon);
+
+    solarScene.add(solarSysGroup);
 }
 
 function run() {
@@ -49,7 +99,7 @@ function run() {
 }
 
 function render() {
-    renderer.render(scene, camera);
+    renderer.render(solarScene, camera);
 }
 
 function animate() {
@@ -57,7 +107,13 @@ function animate() {
     var deltaTime = now - curTime;
     curTime       = now;
     var fracTime  = deltaTime / 1000;
+    var angle = fracTime * Math.PI * 2;
 
-    var angle = 0.1 * Math.PI * 2 * fracTime;
-    shape.rotation.y += angle;
+    // Accélère la rotation Terre-Soleil : 1 an = 1 minute
+    earthGroup.rotation.y += angle * 60 / 365;  // 60x plus rapide
+    solarSysGroup.rotation.y += angle * 60 / 365;  // 60x plus rapide
+    earth.rotation.y      += angle;             // Terre sur elle-même (inchangé)
+    moonGroup.rotation.y  += angle / 28 * 12;   // Lune : 12x plus rapide (cohérent)
+    moon.rotation.y       += angle / 28 * 12;   // Lune synchrone
 }
+
