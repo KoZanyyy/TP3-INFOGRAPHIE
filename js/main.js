@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 var renderer = null;
 var solarScene = null;
@@ -12,6 +13,8 @@ var earthSysGroup = null;
 var earthGroup = null;
 var moonSysGroup = null;
 var moonGroup = null;
+var cameraAngle = 0;
+var controls = null;
 var curTime  = Date.now();
 
 init();
@@ -28,6 +31,15 @@ function init() {
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 4000);
     camera.position.set(0, 5, 30);
     camera.lookAt(0, 0, 0);
+
+    controls = new OrbitControls( camera, renderer.domElement );
+    controls.enableDamping      = true; // an animation loop is required when either damping or auto-rotation are enabled
+    controls.dampingFactor      = 0.25;
+    controls.screenSpacePanning = false;
+    controls.minDistance        = 1;
+    controls.maxDistance        = 10;
+    controls.maxPolarAngle      = Math.PI / 2;
+
 
     // Lumières
     var sunLight = new THREE.PointLight(0xffff88, 200, 200);  // couleur jaune, intensité 5, distance 30
@@ -90,6 +102,8 @@ function init() {
     moonSysGroup.add(moon);
 
     solarScene.add(solarSysGroup);
+
+    controls.target.set(12, 0, 0);
 }
 
 function run() {
@@ -103,17 +117,20 @@ function render() {
 }
 
 function animate() {
+    controls.update();
+
     var now       = Date.now();
     var deltaTime = now - curTime;
     curTime       = now;
     var fracTime  = deltaTime / 1000;
     var angle = fracTime * Math.PI * 2;
 
-    // Accélère la rotation Terre-Soleil : 1 an = 1 minute
-    earthGroup.rotation.y += angle * 60 / 365;  // 60x plus rapide
-    solarSysGroup.rotation.y += angle * 60 / 365;  // 60x plus rapide
-    earth.rotation.y      += angle;             // Terre sur elle-même (inchangé)
-    moonGroup.rotation.y  += angle / 28 * 12;   // Lune : 12x plus rapide (cohérent)
-    moon.rotation.y       += angle / 28 * 12;   // Lune synchrone
+    // Tes rotations système solaire (inchangées)
+    earthGroup.rotation.y += angle * 60 / 365;
+    solarSysGroup.rotation.y += angle * 60 / 365;
+    earth.rotation.y      += angle;
+    moonGroup.rotation.y  += angle / 28 * 12;
+    moon.rotation.y       += angle / 28 * 12;
 }
+
 
