@@ -79,7 +79,7 @@ function init() {
   // Génération de 3 planètes avec vélocité
   var textures = ["images/earth_atmos_2048.jpg", "images/moon_1024.jpg", ""];
   for (let i = 0; i < 3; i++) {
-    let mat = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
+    let mat = new THREE.MeshPhongMaterial({ map: textures[i] });
     let p = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), mat);
 
     let angle = Math.random() * Math.PI * 2;
