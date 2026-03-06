@@ -2,11 +2,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 var renderer, solarScene, camera, controls;
-var blackHole, accretionDisk, diskShader;
+var blackHole, accretionDisk, diskShader, halo;
 var planets = [];
 var raycaster = new THREE.Raycaster();
 var mouse = new THREE.Vector2();
-// Un plan mathématique horizontal (Y=0) pour détecter où pointe la souris
 var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 var mouseWorldPos = new THREE.Vector3();
 var curTime = Date.now();
@@ -21,7 +20,7 @@ function init() {
 
   solarScene = new THREE.Scene();
 
-  // Caméra positionnée pour bien voir le plan de rotation
+  // Caméra
   camera = new THREE.PerspectiveCamera(
     45,
     window.innerWidth / window.innerHeight,
@@ -35,7 +34,7 @@ function init() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.25;
 
-  // Background MilkyWay (inchangé)
+  // Background MilkyWay
   var path = "images/MilkyWay/";
   var format = ".jpg";
   var urls = [
@@ -52,16 +51,29 @@ function init() {
   var ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
   solarScene.add(ambientLight);
 
-  // --- LE TROU NOIR ---
-  // 1. Horizon des événements (Sphère purement noire)
+  // --- TROU NOIR ---
+  // Horizon des événements
   var bhGeometry = new THREE.SphereGeometry(2, 64, 64);
   var bhMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
   blackHole = new THREE.Mesh(bhGeometry, bhMaterial);
   solarScene.add(blackHole);
 
-  // 2. Disque d'accrétion (Géométrie d'anneau + Shader)
+  // Halo autour du trou noir (glow simple)
+  var haloGeom = new THREE.SphereGeometry(2.4, 64, 64);
+  var haloMat = new THREE.MeshBasicMaterial({
+    color: 0x88ccff,
+    transparent: true,
+    opacity: 0.4,
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide,
+    depthWrite: false,
+  });
+  halo = new THREE.Mesh(haloGeom, haloMat);
+  solarScene.add(halo);
+
+  // Disque d'accrétion (anneau + shader)
   var diskGeom = new THREE.RingGeometry(2.5, 8, 64);
-  diskGeom.rotateX(-Math.PI / 2); // Le mettre à l'horizontal
+  diskGeom.rotateX(-Math.PI / 2); // horizontal
 
   diskShader = new THREE.ShaderMaterial({
     vertexShader: document.querySelector("#disk-vert").textContent.trim(),
@@ -70,24 +82,27 @@ function init() {
     transparent: true,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
-    depthWrite: false, // Important pour que l'anneau ne masque pas le fond
+    depthWrite: false,
   });
   accretionDisk = new THREE.Mesh(diskGeom, diskShader);
   solarScene.add(accretionDisk);
 
-  // --- LES PLANÈTES ---
-  // Génération de 3 planètes avec vélocité
-  var textures = ["images/earth_atmos_2048.jpg", "images/moon_1024.jpg", "images/earth_specular_2048.jpg"];
+  // --- PLANÈTES ---
+  var textures = [
+    "images/earth_atmos_2048.jpg",
+    "images/moon_1024.jpg",
+    "images/earth_specular_2048.jpg",
+  ];
+
   for (let i = 0; i < 3; i++) {
-      var texture = new THREE.TextureLoader().load(textures[i]);
-    let mat = new THREE.MeshPhongMaterial({ map : texture  });
+    var texture = new THREE.TextureLoader().load(textures[i]);
+    let mat = new THREE.MeshPhongMaterial({ map: texture });
     let p = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), mat);
 
     let angle = Math.random() * Math.PI * 2;
-    let dist = 12 + Math.random() * 8; // Distance initiale
+    let dist = 12 + Math.random() * 8;
     p.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
 
-    // On donne une vitesse tangentielle pour qu'elles orbitent
     p.userData = {
       velocity: new THREE.Vector3(
         -Math.sin(angle),
@@ -97,11 +112,12 @@ function init() {
       spaghettifying: false,
       eaten: false,
     };
+
     planets.push(p);
     solarScene.add(p);
   }
 
-  // --- LISTENER SOURIS ---
+  // Souris
   window.addEventListener("mousemove", (event) => {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -125,47 +141,46 @@ function animate() {
   var deltaTime = (now - curTime) / 1000;
   curTime = now;
 
-  // Mise à jour du shader du disque
+  // Animation disque + halo
   diskShader.uniforms.time.value += deltaTime;
+  const baseScale = 1.0 + 0.05 * Math.sin(curTime * 0.002);
+  halo.scale.set(baseScale, baseScale, baseScale);
 
-  // Projection de la souris sur le plan 3D
+  // Projection de la souris sur le plan Y=0
   raycaster.setFromCamera(mouse, camera);
   raycaster.ray.intersectPlane(plane, mouseWorldPos);
 
   planets.forEach((p) => {
     if (p.userData.eaten) return;
 
-    // 1. ANIMATION DE SPAGHETTIFICATION (Le trou noir la mange)
+    // 1. Spaghettification
     if (p.userData.spaghettifying) {
-      p.lookAt(0, 0, 0); // On aligne l'axe Z local de la planète vers le centre
-      p.scale.z += deltaTime * 3.0; // Étirement violent
-      p.scale.x = Math.max(0.1, p.scale.x - deltaTime); // Écrasement
+      p.lookAt(0, 0, 0);
+      p.scale.z += deltaTime * 3.0;
+      p.scale.x = Math.max(0.1, p.scale.x - deltaTime);
       p.scale.y = Math.max(0.1, p.scale.y - deltaTime);
 
-      p.position.lerp(new THREE.Vector3(0, 0, 0), 0.08); // Aspiration
+      p.position.lerp(new THREE.Vector3(0, 0, 0), 0.08);
       p.material.opacity = Math.max(0, p.material.opacity - deltaTime);
 
-      // Si elle est engloutie, on la supprime
       if (p.position.length() < 1.0) {
-        p.userData.eaten = true;
-        solarScene.remove(p);
+        respawnPlanet(p);
       }
-      return; // On arrête la physique normale
+      return;
     }
 
-    // 2. PHYSIQUE ORBITALE ET INTERACTION SOURIS
+    // 2. Physique + interaction souris
     let distToCenter = p.position.length();
     let dirToCenter = p.position.clone().negate().normalize();
 
-    // Force de gravité (attire vers 0,0,0)
+    // Gravité
     let gravity = 0.8 / (distToCenter * distToCenter);
     p.userData.velocity.add(dirToCenter.multiplyScalar(gravity));
 
-    // Répulsion de la souris (Force poussée par le joueur)
+    // Poussée souris
     if (mouseWorldPos) {
       let distToMouse = p.position.distanceTo(mouseWorldPos);
       if (distToMouse < 6.0) {
-        // Si la souris est proche
         let dirFromMouse = p.position.clone().sub(mouseWorldPos).normalize();
         let pushForce = 0.06 / Math.max(distToMouse, 0.5);
         p.userData.velocity.add(dirFromMouse.multiplyScalar(pushForce));
@@ -174,10 +189,43 @@ function animate() {
 
     p.position.add(p.userData.velocity);
 
-    // Détection de l'horizon des événements
+    // Bordures (rebond simple)
+    const LIMIT = 30;
+    if (p.position.x > LIMIT) {
+      p.position.x = LIMIT;
+      p.userData.velocity.x *= -0.5;
+    } else if (p.position.x < -LIMIT) {
+      p.position.x = -LIMIT;
+      p.userData.velocity.x *= -0.5;
+    }
+
+    if (p.position.z > LIMIT) {
+      p.position.z = LIMIT;
+      p.userData.velocity.z *= -0.5;
+    } else if (p.position.z < -LIMIT) {
+      p.position.z = -LIMIT;
+      p.userData.velocity.z *= -0.5;
+    }
+
+    // Horizon des événements
     if (distToCenter < 2.5) {
       p.userData.spaghettifying = true;
       p.material.transparent = true;
     }
   });
+}
+
+function respawnPlanet(p) {
+  p.scale.set(1, 1, 1);
+  p.material.opacity = 1;
+  p.material.transparent = false;
+  p.userData.spaghettifying = false;
+  p.userData.eaten = false;
+
+  let angle = Math.random() * Math.PI * 2;
+  let dist = 12 + Math.random() * 8;
+  p.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+  p.userData.velocity
+    .set(-Math.sin(angle), 0, Math.cos(angle))
+    .multiplyScalar(0.12);
 }
