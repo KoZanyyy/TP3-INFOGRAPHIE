@@ -6,9 +6,9 @@ var solarScene = null;
 var camera   = null;
 var earth     = null;
 var moon     = null;
-var solar     = null;
-var solarSysGroup = null;
-var solarGroup = null;
+var sun     = null;
+var sunSysGroup = null;
+var sunGroup = null;
 var earthSysGroup = null;
 var earthGroup = null;
 var moonSysGroup = null;
@@ -23,6 +23,8 @@ run();
 function init() {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     document.body.appendChild(renderer.domElement);
 
     solarScene = new THREE.Scene();
@@ -32,6 +34,7 @@ function init() {
     camera.position.set(0, 5, 30);
     camera.lookAt(0, 0, 0);
 
+    // Controls
     controls = new OrbitControls( camera, renderer.domElement );
     controls.enableDamping      = true; // an animation loop is required when either damping or auto-rotation are enabled
     controls.dampingFactor      = 0.25;
@@ -40,12 +43,30 @@ function init() {
     controls.maxDistance        = 10;
     controls.maxPolarAngle      = Math.PI / 2;
 
+    // Background
+    var path = "images/MilkyWay/";
+    var format = '.jpg';
+    var urls = [
+        path + 'posx' + format, path + 'negx' + format,
+        path + 'posy' + format, path + 'negy' + format,
+        path + 'posz' + format, path + 'negz' + format
+    ];
+
+    var textureCube    = new THREE.CubeTextureLoader().load( urls );
+    textureCube.type   = THREE.UnsignedByteType;
+    textureCube.format = THREE.RGBAFormat;
+    solarScene.background   = textureCube;
 
     // Lumières
     var sunLight = new THREE.PointLight(0xffff88, 200, 200);  // couleur jaune, intensité 5, distance 30
     sunLight.position.set(0, 0, 0);
     solarScene.add(sunLight);
 
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width  = 512; // default
+    sunLight.shadow.mapSize.height = 512; // default
+    sunLight.shadow.camera.near    = 0.5; // default
+    sunLight.shadow.camera.far     = 50;
 
     // Texture Terre
     var earthTexture = new THREE.TextureLoader().load("images/earth_atmos_2048.jpg");
@@ -67,29 +88,29 @@ function init() {
     moon.position.set(0, 0, 0);
 
     // Soleil
-    var solarMaterial = new THREE.MeshBasicMaterial({
+    var sunMaterial = new THREE.MeshBasicMaterial({
         color: 0xFFFF00,
         emissive: 0x444400,
         specular: 0xffffff,
         shininess: 200
     });
-    var solarGeometry = new THREE.SphereGeometry(2, 32, 32);
-    solar = new THREE.Mesh(solarGeometry, solarMaterial);
-    solar.position.set(0, 0, 0);
+    var sunGeometry = new THREE.SphereGeometry(2, 32, 32);
+    sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    sun.position.set(0, 0, 0);
 
     // Groupes hiérarchiques
-    solarSysGroup = new THREE.Group();
-    solarGroup = new THREE.Group();
+    sunSysGroup = new THREE.Group();
+    sunGroup = new THREE.Group();
     earthSysGroup = new THREE.Group();
     earthGroup = new THREE.Group();
     moonSysGroup = new THREE.Group();
     moonGroup = new THREE.Group();
 
     // Hiérarchie
-    solarGroup.add(solarSysGroup);
-    solarSysGroup.add(solar);
+    sunGroup.add(sunSysGroup);
+    sunSysGroup.add(sun);
 
-    solarSysGroup.add(earthGroup);
+    sunSysGroup.add(earthGroup);
     earthGroup.position.set(12, 0, 0); // Distance Soleil-Terre
 
     earthGroup.add(earthSysGroup);
@@ -101,7 +122,14 @@ function init() {
     moonGroup.add(moonSysGroup);
     moonSysGroup.add(moon);
 
-    solarScene.add(solarSysGroup);
+    solarScene.add(sunSysGroup);
+
+    sun.castShadow      = false;
+    sun.receiveShadow   = false;
+    earth.castShadow    = true;
+    earth.receiveShadow = true;
+    moon.castShadow     = true;
+    moon.receiveShadow  = true;
 
     controls.target.set(12, 0, 0);
 }
@@ -127,7 +155,7 @@ function animate() {
 
     // Tes rotations système solaire (inchangées)
     earthGroup.rotation.y += angle * 60 / 365;
-    solarSysGroup.rotation.y += angle * 60 / 365;
+    sunSysGroup.rotation.y += angle * 60 / 365;
     earth.rotation.y      += angle;
     moonGroup.rotation.y  += angle / 28 * 12;
     moon.rotation.y       += angle / 28 * 12;
