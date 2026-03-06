@@ -1,183 +1,182 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-var renderer = null;
-var solarScene = null;
-var camera   = null;
-var earth     = null;
-var moon     = null;
-var sun     = null;
-var sunSysGroup = null;
-var earthSysGroup = null;
-var earthGroup = null;
-var moonSysGroup = null;
-var moonGroup = null;
-var cameraAngle = 0;
-var controls = null;
-var shader;
-var uniforms;
-var curTime  = Date.now();
+var renderer, solarScene, camera, controls;
+var blackHole, accretionDisk, diskShader;
+var planets = [];
+var raycaster = new THREE.Raycaster();
+var mouse = new THREE.Vector2();
+// Un plan mathématique horizontal (Y=0) pour détecter où pointe la souris
+var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+var mouseWorldPos = new THREE.Vector3();
+var curTime = Date.now();
 
 init();
 run();
 
 function init() {
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-    document.body.appendChild(renderer.domElement);
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-    solarScene = new THREE.Scene();
+  solarScene = new THREE.Scene();
 
-    // Caméra reculée pour tout voir
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 4000);
-    camera.position.set(0, 5, 30);
-    camera.lookAt(0, 0, 0);
+  // Caméra positionnée pour bien voir le plan de rotation
+  camera = new THREE.PerspectiveCamera(
+    45,
+    window.innerWidth / window.innerHeight,
+    1,
+    4000,
+  );
+  camera.position.set(0, 15, 35);
+  camera.lookAt(0, 0, 0);
 
-    // Controls
-    controls = new OrbitControls( camera, renderer.domElement );
-    controls.enableDamping      = true; // an animation loop is required when either damping or auto-rotation are enabled
-    controls.dampingFactor      = 0.25;
-    controls.screenSpacePanning = false;
-    controls.minDistance        = 1;
-    controls.maxDistance        = 10;
-    controls.maxPolarAngle      = Math.PI / 2;
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.25;
 
-    // Background
-    var path = "images/MilkyWay/";
-    var format = '.jpg';
-    var urls = [
-        path + 'posx' + format, path + 'negx' + format,
-        path + 'posy' + format, path + 'negy' + format,
-        path + 'posz' + format, path + 'negz' + format
-    ];
+  // Background MilkyWay (inchangé)
+  var path = "images/MilkyWay/";
+  var format = ".jpg";
+  var urls = [
+    path + "posx" + format,
+    path + "negx" + format,
+    path + "posy" + format,
+    path + "negy" + format,
+    path + "posz" + format,
+    path + "negz" + format,
+  ];
+  var textureCube = new THREE.CubeTextureLoader().load(urls);
+  solarScene.background = textureCube;
 
-    var textureCube    = new THREE.CubeTextureLoader().load( urls );
-    textureCube.type   = THREE.UnsignedByteType;
-    textureCube.format = THREE.RGBAFormat;
-    solarScene.background   = textureCube;
+  var ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+  solarScene.add(ambientLight);
 
-    // Lumières
-    var sunLight = new THREE.PointLight(0xffff88, 200, 200);  // couleur jaune, intensité 5, distance 30
-    sunLight.position.set(0, 0, 0);
-    solarScene.add(sunLight);
+  // --- LE TROU NOIR ---
+  // 1. Horizon des événements (Sphère purement noire)
+  var bhGeometry = new THREE.SphereGeometry(2, 64, 64);
+  var bhMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  blackHole = new THREE.Mesh(bhGeometry, bhMaterial);
+  solarScene.add(blackHole);
 
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width  = 512; // default
-    sunLight.shadow.mapSize.height = 512; // default
-    sunLight.shadow.camera.near    = 0.5; // default
-    sunLight.shadow.camera.far     = 50;
+  // 2. Disque d'accrétion (Géométrie d'anneau + Shader)
+  var diskGeom = new THREE.RingGeometry(2.5, 8, 64);
+  diskGeom.rotateX(-Math.PI / 2); // Le mettre à l'horizontal
 
-    // Texture Terre
-    var earthTexture = new THREE.TextureLoader().load("images/earth_atmos_2048.jpg");
+  diskShader = new THREE.ShaderMaterial({
+    vertexShader: document.querySelector("#disk-vert").textContent.trim(),
+    fragmentShader: document.querySelector("#disk-frag").textContent.trim(),
+    uniforms: { time: { value: 0.0 } },
+    transparent: true,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false, // Important pour que l'anneau ne masque pas le fond
+  });
+  accretionDisk = new THREE.Mesh(diskGeom, diskShader);
+  solarScene.add(accretionDisk);
 
-    // Terre
-    var earthMaterial = new THREE.MeshPhongMaterial({ map: earthTexture });
-    var earthGeometry = new THREE.SphereGeometry(1, 32, 32);
-    earth = new THREE.Mesh(earthGeometry, earthMaterial);
-    earth.position.set(0, 0, 0);
-    earth.rotation.x = Math.PI / 5;
+  // --- LES PLANÈTES ---
+  // Génération de 3 planètes avec vélocité
+  var textures = ["images/earth_atmos_2048.jpg", "images/moon_1024.jpg", ""];
+  for (let i = 0; i < 3; i++) {
+    let mat = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
+    let p = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), mat);
 
-    // Texture Lune
-    var moonTexture = new THREE.TextureLoader().load("images/moon_1024.jpg");
+    let angle = Math.random() * Math.PI * 2;
+    let dist = 12 + Math.random() * 8; // Distance initiale
+    p.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
 
-    // Lune
-    var moonMaterial = new THREE.MeshPhongMaterial({ map: moonTexture });
-    var moonGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-    moon = new THREE.Mesh(moonGeometry, moonMaterial);
-    moon.position.set(0, 0, 0);
-
-    // Soleil
-    var sunMaterial = new THREE.MeshBasicMaterial({
-        color: 0xFFFF00,
-        emissive: 0x444400,
-        specular: 0xffffff,
-        shininess: 200
-    });
-    var sunGeometry = new THREE.SphereGeometry(2, 32, 32);
-    sun = new THREE.Mesh(sunGeometry, sunMaterial);
-    sun.position.set(0, 0, 0);
-
-    // Groupes hiérarchiques
-    sunSysGroup = new THREE.Group();
-    earthSysGroup = new THREE.Group();
-    earthGroup = new THREE.Group();
-    moonSysGroup = new THREE.Group();
-    moonGroup = new THREE.Group();
-
-    // Hiérarchie
-    sunSysGroup.add(sun);
-
-    sunSysGroup.add(earthGroup);
-    earthGroup.position.set(12, 0, 0); // Distance Soleil-Terre
-
-    earthGroup.add(earthSysGroup);
-    earthSysGroup.add(earth);
-
-    earthSysGroup.add(moonGroup);
-    moonGroup.position.set(3, 0, 0); // Distance Terre-Lune
-
-    moonGroup.add(moonSysGroup);
-    moonSysGroup.add(moon);
-
-
-
-    sun.castShadow      = false;
-    sun.receiveShadow   = false;
-    earth.castShadow    = true;
-    earth.receiveShadow = true;
-    moon.castShadow     = true;
-    moon.receiveShadow  = true;
-
-    controls.target.set(12, 0, 0);
-
-    uniforms = {
-        moment: { value: 0.0 },
-        scale:  { value: 0.02 }
+    // On donne une vitesse tangentielle pour qu'elles orbitent
+    p.userData = {
+      velocity: new THREE.Vector3(
+        -Math.sin(angle),
+        0,
+        Math.cos(angle),
+      ).multiplyScalar(0.12),
+      spaghettifying: false,
+      eaten: false,
     };
-    shader = new THREE.ShaderMaterial( {
-        vertexShader: document.querySelector( '#post-vert' ).textContent.trim(),
-        fragmentShader: document.querySelector( '#post-frag' ).textContent.trim(),
-        uniforms: uniforms
-    } );
-    shader.glslVersion = THREE.GLSL3;
-    var sunHalo  = new THREE.Mesh( sunGeometry, shader );
-    sunHalo.castShadow = false;
-    sunHalo.receiveShadow = false;
-    sunSysGroup.add( sunHalo );
+    planets.push(p);
+    solarScene.add(p);
+  }
 
-    solarScene.add(sunSysGroup);
-
+  // --- LISTENER SOURIS ---
+  window.addEventListener("mousemove", (event) => {
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  });
 }
 
 function run() {
-    requestAnimationFrame(run);
-    render();
-    animate();
+  requestAnimationFrame(run);
+  render();
+  animate();
 }
 
 function render() {
-    renderer.render(solarScene, camera);
+  renderer.render(solarScene, camera);
 }
 
 function animate() {
-    controls.update();
+  controls.update();
 
-    var now       = Date.now();
-    var deltaTime = now - curTime;
-    curTime       = now;
-    var fracTime  = deltaTime / 1000;
-    var angle = fracTime * Math.PI * 2;
+  var now = Date.now();
+  var deltaTime = (now - curTime) / 1000;
+  curTime = now;
 
-    // Tes rotations système solaire (inchangées)
-    earthGroup.rotation.y += angle * 60 / 365;
-    sunSysGroup.rotation.y += angle * 60 / 365;
-    earth.rotation.y      += angle;
-    moonGroup.rotation.y  += angle / 28 * 12;
-    moon.rotation.y       += angle / 28 * 12;
+  // Mise à jour du shader du disque
+  diskShader.uniforms.time.value += deltaTime;
 
-    shader.uniforms.moment.value += fracTime;
+  // Projection de la souris sur le plan 3D
+  raycaster.setFromCamera(mouse, camera);
+  raycaster.ray.intersectPlane(plane, mouseWorldPos);
+
+  planets.forEach((p) => {
+    if (p.userData.eaten) return;
+
+    // 1. ANIMATION DE SPAGHETTIFICATION (Le trou noir la mange)
+    if (p.userData.spaghettifying) {
+      p.lookAt(0, 0, 0); // On aligne l'axe Z local de la planète vers le centre
+      p.scale.z += deltaTime * 3.0; // Étirement violent
+      p.scale.x = Math.max(0.1, p.scale.x - deltaTime); // Écrasement
+      p.scale.y = Math.max(0.1, p.scale.y - deltaTime);
+
+      p.position.lerp(new THREE.Vector3(0, 0, 0), 0.08); // Aspiration
+      p.material.opacity = Math.max(0, p.material.opacity - deltaTime);
+
+      // Si elle est engloutie, on la supprime
+      if (p.position.length() < 1.0) {
+        p.userData.eaten = true;
+        solarScene.remove(p);
+      }
+      return; // On arrête la physique normale
+    }
+
+    // 2. PHYSIQUE ORBITALE ET INTERACTION SOURIS
+    let distToCenter = p.position.length();
+    let dirToCenter = p.position.clone().negate().normalize();
+
+    // Force de gravité (attire vers 0,0,0)
+    let gravity = 0.8 / (distToCenter * distToCenter);
+    p.userData.velocity.add(dirToCenter.multiplyScalar(gravity));
+
+    // Répulsion de la souris (Force poussée par le joueur)
+    if (mouseWorldPos) {
+      let distToMouse = p.position.distanceTo(mouseWorldPos);
+      if (distToMouse < 6.0) {
+        // Si la souris est proche
+        let dirFromMouse = p.position.clone().sub(mouseWorldPos).normalize();
+        let pushForce = 0.06 / Math.max(distToMouse, 0.5);
+        p.userData.velocity.add(dirFromMouse.multiplyScalar(pushForce));
+      }
+    }
+
+    p.position.add(p.userData.velocity);
+
+    // Détection de l'horizon des événements
+    if (distToCenter < 2.5) {
+      p.userData.spaghettifying = true;
+      p.material.transparent = true;
+    }
+  });
 }
-
-
