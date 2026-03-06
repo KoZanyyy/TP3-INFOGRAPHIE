@@ -1,5 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
 var renderer, solarScene, camera, controls;
 var blackHole, accretionDisk, diskShader, halo;
@@ -9,6 +12,59 @@ var mouse = new THREE.Vector2();
 var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 var mouseWorldPos = new THREE.Vector3();
 var curTime = Date.now();
+
+// post-process
+var composer, lensingPass;
+
+// --- SHADER DE LENTILLE (post-process) ---
+const lensingShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    blackHoleScreenPos: { value: new THREE.Vector2(0.5, 0.5) },
+    lensingStrength: { value: 0.18 },
+    lensingRadius: { value: 0.35 },
+    aspectRatio: { value: window.innerWidth / window.innerHeight },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 blackHoleScreenPos;
+    uniform float lensingStrength;
+    uniform float lensingRadius;
+    uniform float aspectRatio;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 uv = vUv;
+      vec2 toCenter = uv - blackHoleScreenPos;
+      toCenter.x *= aspectRatio;
+
+      float dist = length(toCenter);
+
+      if (dist < lensingRadius) {
+        float distortionAmount = lensingStrength / (dist * dist + 0.003);
+        distortionAmount = clamp(distortionAmount, 0.0, 0.7);
+
+        float falloff = smoothstep(lensingRadius, lensingRadius * 0.3, dist);
+        distortionAmount *= falloff;
+
+        vec2 offset = normalize(toCenter) * distortionAmount;
+        offset.x /= aspectRatio;
+
+        uv -= offset;
+      }
+
+      vec4 color = texture2D(tDiffuse, uv);
+      gl_FragColor = color;
+    }
+  `,
+};
 
 init();
 run();
@@ -58,10 +114,31 @@ function init() {
   blackHole = new THREE.Mesh(bhGeometry, bhMaterial);
   solarScene.add(blackHole);
 
-  // Halo autour du trou noir (glow simple)
+  // Disque d'accrétion (RingGeometry + shader)
+  var diskGeom = new THREE.RingGeometry(2.5, 8, 64);
+  diskGeom.rotateX(-Math.PI / 2);
+
+  diskShader = new THREE.ShaderMaterial({
+    vertexShader: document.querySelector("#disk-vert").textContent.trim(),
+    fragmentShader: document.querySelector("#disk-frag").textContent.trim(),
+    uniforms: {
+      time: { value: 0.0 },
+      baseColorInner: { value: new THREE.Color(0xffcc66) },
+      baseColorOuter: { value: new THREE.Color(0xff5500) },
+    },
+    transparent: true,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  accretionDisk = new THREE.Mesh(diskGeom, diskShader);
+  solarScene.add(accretionDisk);
+
+  // Halo même teinte que le disque (glow)
   var haloGeom = new THREE.SphereGeometry(2.4, 64, 64);
+  const haloColor = diskShader.uniforms.baseColorInner.value.clone();
   var haloMat = new THREE.MeshBasicMaterial({
-    color: 0x88ccff,
+    color: haloColor,
     transparent: true,
     opacity: 0.4,
     blending: THREE.AdditiveBlending,
@@ -70,22 +147,6 @@ function init() {
   });
   halo = new THREE.Mesh(haloGeom, haloMat);
   solarScene.add(halo);
-
-  // Disque d'accrétion (anneau + shader)
-  var diskGeom = new THREE.RingGeometry(2.5, 8, 64);
-  diskGeom.rotateX(-Math.PI / 2); // horizontal
-
-  diskShader = new THREE.ShaderMaterial({
-    vertexShader: document.querySelector("#disk-vert").textContent.trim(),
-    fragmentShader: document.querySelector("#disk-frag").textContent.trim(),
-    uniforms: { time: { value: 0.0 } },
-    transparent: true,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  accretionDisk = new THREE.Mesh(diskGeom, diskShader);
-  solarScene.add(accretionDisk);
 
   // --- PLANÈTES ---
   var textures = [
@@ -122,6 +183,26 @@ function init() {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   });
+
+  // --- POST-PROCESS LENSING ---
+  composer = new EffectComposer(renderer);
+  const renderPass = new RenderPass(solarScene, camera);
+  composer.addPass(renderPass);
+
+  lensingPass = new ShaderPass(lensingShader);
+  composer.addPass(lensingPass);
+
+  lensingPass.uniforms.aspectRatio.value =
+    window.innerWidth / window.innerHeight;
+
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    lensingPass.uniforms.aspectRatio.value =
+      window.innerWidth / window.innerHeight;
+  });
 }
 
 function run() {
@@ -131,7 +212,7 @@ function run() {
 }
 
 function render() {
-  renderer.render(solarScene, camera);
+  composer.render();
 }
 
 function animate() {
@@ -141,12 +222,19 @@ function animate() {
   var deltaTime = (now - curTime) / 1000;
   curTime = now;
 
-  // Animation disque + halo
+  // Disque + halo
   diskShader.uniforms.time.value += deltaTime;
   const baseScale = 1.0 + 0.05 * Math.sin(curTime * 0.002);
   halo.scale.set(baseScale, baseScale, baseScale);
 
-  // Projection de la souris sur le plan Y=0
+  // Position du trou noir en coordonnées écran pour le shader de lentille
+  const bhScreenPos = blackHole.position.clone().project(camera);
+  lensingPass.uniforms.blackHoleScreenPos.value.set(
+    (bhScreenPos.x + 1) / 2,
+    (bhScreenPos.y + 1) / 2,
+  );
+
+  // Projection de la souris sur le plan Y = 0
   raycaster.setFromCamera(mouse, camera);
   raycaster.ray.intersectPlane(plane, mouseWorldPos);
 
@@ -189,7 +277,7 @@ function animate() {
 
     p.position.add(p.userData.velocity);
 
-    // Bordures (rebond simple)
+    // Bordures
     const LIMIT = 30;
     if (p.position.x > LIMIT) {
       p.position.x = LIMIT;
