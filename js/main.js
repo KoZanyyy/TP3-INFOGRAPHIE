@@ -8,13 +8,14 @@ var earth     = null;
 var moon     = null;
 var sun     = null;
 var sunSysGroup = null;
-var sunGroup = null;
 var earthSysGroup = null;
 var earthGroup = null;
 var moonSysGroup = null;
 var moonGroup = null;
 var cameraAngle = 0;
 var controls = null;
+var shader;
+var uniforms;
 var curTime  = Date.now();
 
 init();
@@ -100,14 +101,12 @@ function init() {
 
     // Groupes hiérarchiques
     sunSysGroup = new THREE.Group();
-    sunGroup = new THREE.Group();
     earthSysGroup = new THREE.Group();
     earthGroup = new THREE.Group();
     moonSysGroup = new THREE.Group();
     moonGroup = new THREE.Group();
 
     // Hiérarchie
-    sunGroup.add(sunSysGroup);
     sunSysGroup.add(sun);
 
     sunSysGroup.add(earthGroup);
@@ -122,7 +121,7 @@ function init() {
     moonGroup.add(moonSysGroup);
     moonSysGroup.add(moon);
 
-    solarScene.add(sunSysGroup);
+
 
     sun.castShadow      = false;
     sun.receiveShadow   = false;
@@ -132,6 +131,24 @@ function init() {
     moon.receiveShadow  = true;
 
     controls.target.set(12, 0, 0);
+
+    uniforms = {
+        moment: { value: 0.0 },
+        scale:  { value: 0.02 }
+    };
+    shader = new THREE.ShaderMaterial( {
+        vertexShader: document.querySelector( '#post-vert' ).textContent.trim(),
+        fragmentShader: document.querySelector( '#post-frag' ).textContent.trim(),
+        uniforms: uniforms
+    } );
+    shader.glslVersion = THREE.GLSL3;
+    var sunHalo  = new THREE.Mesh( sunGeometry, shader );
+    sunHalo.castShadow = false;
+    sunHalo.receiveShadow = false;
+    sunSysGroup.add( sunHalo );
+
+    solarScene.add(sunSysGroup);
+
 }
 
 function run() {
@@ -159,6 +176,8 @@ function animate() {
     earth.rotation.y      += angle;
     moonGroup.rotation.y  += angle / 28 * 12;
     moon.rotation.y       += angle / 28 * 12;
+
+    shader.uniforms.moment.value += fracTime;
 }
 
 

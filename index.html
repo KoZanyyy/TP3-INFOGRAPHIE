@@ -21,5 +21,44 @@
 </script>
 
 <script type="module" src="js/main.js"></script>
+<script id="post-vert" type="x-shader/x-vertex">
+    // Vertex shader
+    uniform float moment; // (général) temps écoulé depuis le début
+    uniform float scale;  // (général) paramètre donnant le gonflement périodique
+    out vec3 fn;          // (sortie) normale au sommet (repère écran)
+    out vec3 vertPos;     // (sortie) coordonnées 3D du sommet (repère écran)
+    out vec3 gblPos;      // (sortie) coordonnées 3D du sommet (repère général)
+    void main() {
+    float t = mod( moment, 6.28318530717958647688 );
+    // On gonfle légèrement le soleil périodiquement en fonction du temps.
+    vec3 scaled_pos = position + scale * (1.0+cos( 2.0*t)) * normal;
+    gblPos          = scaled_pos;
+    // On calcule le vecteur normal au sommet dans le repère écran
+    fn              = vec3( normalMatrix * normal );
+    // On calcule la position du sommet dans le repère caméra
+    vec4 vertPos4   = modelViewMatrix * vec4( scaled_pos, 1.0 );
+    // On envoie au fragment shader la position du sommet dans
+    // le repère camera.
+    vertPos         = vec3(vertPos4) / vertPos4.w;
+    // On indique à OpenGL la position du sommet dans le repère écran/pixel
+    gl_Position     = projectionMatrix * vertPos4;
+    }
+</script>
+<script id="post-frag" type="x-shader/x-fragment">
+    // Fragment/pixel shader
+  in vec3 fn;      // (entrée) normale du pixel (repère écran) (interpolée)
+  in vec3 vertPos; // (entrée) coordonnées 3D du pixel (repère écran)(interpolées)
+  in vec3 gblPos;  // (entrée) coordonnées 3D du pixel (repère général)(interpolées)
+    uniform float moment; // (général) temps écoulé depuis le début
+    out vec4 outColor; // (sortie) la couleur de sortie du pixel
+
+    void main() {
+    float t = mod( moment, 6.28318530717958647688 ); // temps
+    vec3 n1 = normalize(fn); // vecteur normal au soleil (repère écran)
+    float l = abs( n1.z );   // proche de 0 sur les bords du soleil
+    outColor.rgb = vec3( 1.0 , 0.6+0.4* cos( 4.*gblPos.x + 3.*t ), l );
+    outColor.a   = 1.0;
+    }
+</script>
 </body>
 </html>
