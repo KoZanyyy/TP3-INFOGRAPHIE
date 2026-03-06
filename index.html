@@ -14,7 +14,8 @@
       {
         "imports": {
           "three": "./three.module.js",
-          "three/addons/controls/": "./examples/jsm/controls/"
+          "three/addons/controls/": "./examples/jsm/controls/",
+          "three/addons/postprocessing/": "./examples/jsm/postprocessing/"
         }
       }
     </script>
@@ -32,14 +33,18 @@
 
     <script id="disk-frag" type="x-shader/x-fragment">
       uniform float time;
+      uniform vec3 baseColorInner;
+      uniform vec3 baseColorOuter;
       varying vec3 vPos;
+
       void main() {
           // vPos.x et vPos.z car le RingGeometry a été tourné à plat
           float dist = length(vPos.xz);
           float angle = atan(vPos.z, vPos.x) + time * 2.0;
 
-          // Couleur de base (jaune/orange)
-          vec3 color = mix(vec3(1.0, 0.9, 0.5), vec3(0.8, 0.3, 0.0), (dist - 2.5) / 5.5);
+          // interpolation radial entre inner et outer
+          float t = clamp((dist - 2.5) / 5.5, 0.0, 1.0);
+          vec3 color = mix(baseColorInner, baseColorOuter, t);
 
           // Ajout de bandes rotatives/tourbillons
           float bands = sin(dist * 10.0 - time * 3.0 + angle * 4.0) * 0.5 + 0.5;
