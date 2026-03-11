@@ -4,16 +4,24 @@ import { diskFrag } from "./shaders/diskFrag.js";
 import { haloVert } from "./shaders/haloVert.js";
 import { haloFrag } from "./shaders/haloFrag.js";
 
-var blackHole, halo, haloShader, accretionDisk, diskShader;
+var blackHoleGroup, blackHole, halo, haloShader, accretionDisk, diskShader;
+
+// Variable d'échelle globale du trou noir
+export var bhParams = {
+  currentScale: 1.0,
+  targetScale: 1.0,
+};
 
 export function createBlackHole(scene) {
-  // Horizon des événements
+  // On crée un groupe pour scaler tout en même temps
+  blackHoleGroup = new THREE.Group();
+  scene.add(blackHoleGroup);
+
   var bhGeometry = new THREE.SphereGeometry(2, 64, 64);
   var bhMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
   blackHole = new THREE.Mesh(bhGeometry, bhMaterial);
-  scene.add(blackHole);
+  blackHoleGroup.add(blackHole);
 
-  // Halo : Billboard (Plan) sur lequel on dessine le shader en forme de sablier
   haloShader = new THREE.ShaderMaterial({
     vertexShader: haloVert,
     fragmentShader: haloFrag,
@@ -24,10 +32,9 @@ export function createBlackHole(scene) {
     depthWrite: false,
   });
 
-  halo = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), haloShader);
-  scene.add(halo);
+  halo = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), haloShader);
+  blackHoleGroup.add(halo);
 
-  // Disque d'accrétion
   var diskGeom = new THREE.RingGeometry(2.5, 8, 128);
   diskGeom.rotateX(-Math.PI / 2);
   diskShader = new THREE.ShaderMaterial({
@@ -40,7 +47,7 @@ export function createBlackHole(scene) {
     depthWrite: false,
   });
   accretionDisk = new THREE.Mesh(diskGeom, diskShader);
-  scene.add(accretionDisk);
+  blackHoleGroup.add(accretionDisk);
 }
 
 export function updateBlackHole(deltaTime, camera) {
@@ -51,4 +58,13 @@ export function updateBlackHole(deltaTime, camera) {
   if (camera) {
     halo.quaternion.copy(camera.quaternion);
   }
+
+  // Interpolation fluide vers la nouvelle échelle
+  bhParams.currentScale +=
+    (bhParams.targetScale - bhParams.currentScale) * deltaTime * 2.0;
+  blackHoleGroup.scale.set(
+    bhParams.currentScale,
+    bhParams.currentScale,
+    bhParams.currentScale,
+  );
 }

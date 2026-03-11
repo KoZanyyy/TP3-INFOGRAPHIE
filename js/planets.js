@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { bhParams } from "./blackhole.js"; // Import pour pouvoir le modifier
 
 var planets = [];
 
@@ -15,7 +16,7 @@ export function createPlanets(scene) {
     let p = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), mat);
 
     let angle = Math.random() * Math.PI * 2;
-    let dist = 12 + Math.random() * 8;
+    let dist = 15 + Math.random() * 10;
     p.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
 
     p.userData = {
@@ -23,7 +24,7 @@ export function createPlanets(scene) {
         -Math.sin(angle),
         0,
         Math.cos(angle),
-      ).multiplyScalar(0.12),
+      ).multiplyScalar(0.15),
       spaghettifying: false,
       eaten: false,
     };
@@ -34,6 +35,9 @@ export function createPlanets(scene) {
 }
 
 export function updatePlanets(deltaTime, mouseWorldPos) {
+  // Le rayon effectif d'attraction dépend de l'échelle du trou noir
+  let eventHorizonRadius = 2.5 * bhParams.currentScale;
+
   planets.forEach((p) => {
     if (p.userData.eaten) return;
 
@@ -46,7 +50,10 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
       p.position.lerp(new THREE.Vector3(0, 0, 0), 0.08);
       p.material.opacity = Math.max(0, p.material.opacity - deltaTime);
 
-      if (p.position.length() < 1.0) {
+      // Si la planète est arrivée au centre, elle est mangée !
+      if (p.position.length() < 1.0 * bhParams.currentScale) {
+        // Le trou noir grossit de 15% à chaque repas
+        bhParams.targetScale += 0.15;
         respawnPlanet(p);
       }
       return;
@@ -55,8 +62,10 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
     let distToCenter = p.position.length();
     let dirToCenter = p.position.clone().negate().normalize();
 
-    let gravity = 0.8 / (distToCenter * distToCenter);
-    p.userData.velocity.add(dirToCenter.multiplyScalar(gravity));
+    // La gravité s'adapte à la taille (masse) du trou noir
+    let gravityForce =
+      (0.8 * bhParams.currentScale) / (distToCenter * distToCenter);
+    p.userData.velocity.add(dirToCenter.multiplyScalar(gravityForce));
 
     if (mouseWorldPos) {
       let distToMouse = p.position.distanceTo(mouseWorldPos);
@@ -69,7 +78,7 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
 
     p.position.add(p.userData.velocity);
 
-    const LIMIT = 30;
+    const LIMIT = 40; // Légèrement augmenté pour laisser de la place
     if (p.position.x > LIMIT) {
       p.position.x = LIMIT;
       p.userData.velocity.x *= -0.5;
@@ -85,7 +94,8 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
       p.userData.velocity.z *= -0.5;
     }
 
-    if (distToCenter < 2.5) {
+    // Déclenchement de la spaghettification adapté à la taille du trou noir
+    if (distToCenter < eventHorizonRadius) {
       p.userData.spaghettifying = true;
       p.material.transparent = true;
     }
@@ -100,9 +110,12 @@ function respawnPlanet(p) {
   p.userData.eaten = false;
 
   let angle = Math.random() * Math.PI * 2;
-  let dist = 12 + Math.random() * 8;
+  // Fait respawn la planète plus loin si le trou noir est devenu gros
+  let baseDist = 15 * Math.max(1.0, bhParams.targetScale * 0.8);
+  let dist = baseDist + Math.random() * 10;
+
   p.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
   p.userData.velocity
     .set(-Math.sin(angle), 0, Math.cos(angle))
-    .multiplyScalar(0.12);
+    .multiplyScalar(0.15);
 }
