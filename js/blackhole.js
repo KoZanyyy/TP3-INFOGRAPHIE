@@ -13,8 +13,7 @@ export function createBlackHole(scene) {
   blackHole = new THREE.Mesh(bhGeometry, bhMaterial);
   scene.add(blackHole);
 
-  // Photonsphère : tore fin à l'équateur
-
+  // Halo : Billboard (Plan) sur lequel on dessine le shader en forme de sablier
   haloShader = new THREE.ShaderMaterial({
     vertexShader: haloVert,
     fragmentShader: haloFrag,
@@ -25,9 +24,7 @@ export function createBlackHole(scene) {
     depthWrite: false,
   });
 
-  // Ring très fin, vertical, qui simule la photonsphère vue de côté
-  halo = new THREE.Mesh(new THREE.RingGeometry(1.8, 3.4, 128), haloShader);
-  // Pas de rotation : le ring est déjà vertical (dans le plan XY)
+  halo = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), haloShader);
   scene.add(halo);
 
   // Disque d'accrétion

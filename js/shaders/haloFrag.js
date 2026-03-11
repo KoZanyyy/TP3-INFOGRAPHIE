@@ -1,25 +1,53 @@
 export const haloFrag = /* glsl */ `
   varying vec2 vUv;
-  varying vec3 vPos;
   uniform float time;
 
   void main() {
-    // Rayon normalisé dans le ring (0 = bord interne, 1 = bord externe)
-    float r = length(vPos.xy);
-    float rNorm = (r - 2.0) / 0.6; // 0 → 1
+    // Recentrer UV de [0, 1] à [-1, 1]
+    vec2 p = vUv * 2.0 - 1.0;
+    
+    // Déformation en sablier :
+    // Plus on est proche de y=0 (le disque), plus x est "compressé", 
+    // ce qui donne l'illusion que le rayon s'évase (s'élargit).
+    // exp(-abs(p.y)*4.0) crée une belle courbe exponentielle.
+    float flare = exp(-abs(p.y) * 3.5) * 0.45;
+    
+    // Rayon virtuel courbé
+    float r = length(vec2(p.x * (1.0 - flare), p.y));
 
-    // Fondu sur les deux bords du ring → anneau lumineux fin
-    float band = smoothstep(0.0, 0.3, rNorm) * smoothstep(1.0, 0.7, rNorm);
+    // L'arc lumineux : un anneau fin (rayon ~0.5 dans cet espace normalisé)
+    // r - 0.55 définit la position de l'arc
+    float arc = abs(r - 0.55);
+    
+    // Épaisseur de l'arc (plus y est proche de 0, plus l'arc s'épaissit et se fond dans le disque)
+    float thickness = mix(0.05, 0.18, exp(-abs(p.y) * 4.0));
+    float intensity = smoothstep(thickness, 0.0, arc);
 
-    // Angle pour l'animation de flux orbital
-    float angle = atan(vPos.y, vPos.x);
-    float flow = sin(angle * 10.0 - time * 4.0) * 0.5 + 0.5;
+    // Ajouter l'effet de "chute" : des stries qui descendent vers y=0
+    float angle = atan(p.y, p.x);
+    // On utilise abs(p.y) dans le temps pour que ça tombe vers le centre (depuis le haut ET depuis le bas)
+    float fall = sin(angle * 8.0 - time * 5.0 * sign(p.y)) * 0.5 + 0.5;
+    
+    // Masque pour cacher l'intérieur du trou noir (r < 0.48)
+    float holeMask = smoothstep(0.48, 0.52, r);
+    
+    // On atténue fortement sur les côtés (là où c'est censé rejoindre le disque vu de côté)
+    // pour éviter des coupures nettes
+    float sideFade = smoothstep(1.0, 0.2, abs(p.x));
 
-    // Couleur blanc chaud
-    vec3 color = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 1.0, 1.0), flow);
+    float finalIntensity = intensity * (0.6 + 0.4 * fall) * holeMask * sideFade;
 
-    float alpha = band * (0.7 + 0.3 * flow);
-    alpha = clamp(alpha, 0.0, 1.0);
+    // Couleur: Blanc/Jaune chaud qui vire au orangé sur les bords du sablier
+    vec3 coreColor = vec3(1.0, 0.95, 0.8); // Blanc chaud
+    vec3 edgeColor = vec3(1.0, 0.6, 0.1);  // Orange (comme le disque)
+    
+    // Plus on est proche du disque (y=0), plus on prend la couleur du disque
+    vec3 color = mix(coreColor, edgeColor, exp(-abs(p.y) * 2.0));
+    
+    // Boost lumineux
+    color *= 1.5;
+
+    float alpha = finalIntensity;
 
     gl_FragColor = vec4(color, alpha);
   }
