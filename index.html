@@ -18,38 +18,6 @@
         }
       }
     </script>
-
     <script type="module" src="js/main.js"></script>
-
-    <!-- Shader pour le disque d'accrétion -->
-    <script id="disk-vert" type="x-shader/x-vertex">
-      varying vec3 vPos;
-      void main() {
-          vPos = position; // Position locale pour calculer le rayon
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    </script>
-
-    <script id="disk-frag" type="x-shader/x-fragment">
-      uniform float time;
-      varying vec3 vPos;
-      void main() {
-          // vPos.x et vPos.z car le RingGeometry a été tourné à plat
-          float dist = length(vPos.xz);
-          float angle = atan(vPos.z, vPos.x) + time * 2.0;
-
-          // Couleur de base (jaune/orange)
-          vec3 color = mix(vec3(1.0, 0.9, 0.5), vec3(0.8, 0.3, 0.0), (dist - 2.5) / 5.5);
-
-          // Ajout de bandes rotatives/tourbillons
-          float bands = sin(dist * 10.0 - time * 3.0 + angle * 4.0) * 0.5 + 0.5;
-          color *= (0.6 + 0.4 * bands);
-
-          // Fondu sur les bords internes (proches du trou noir) et externes
-          float alpha = smoothstep(8.0, 6.0, dist) * smoothstep(2.5, 3.0, dist);
-
-          gl_FragColor = vec4(color, alpha);
-      }
-    </script>
   </body>
 </html>
