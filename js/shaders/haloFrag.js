@@ -8,14 +8,12 @@ export const haloFrag = /* glsl */ `
     
     // Déformation en sablier :
     // Plus on est proche de y=0 (le disque), plus x est "compressé", 
-    // ce qui donne l'illusion que le rayon s'évase (s'élargit).
-    // exp(-abs(p.y)*4.0) crée une belle courbe exponentielle.
     float flare = exp(-abs(p.y) * 3.5) * 0.45;
     
     // Rayon virtuel courbé
     float r = length(vec2(p.x * (1.0 - flare), p.y));
 
-    // L'arc lumineux : un anneau fin (rayon ~0.5 dans cet espace normalisé)
+    // L'arc lumineux : un anneau fin 
     // r - 0.55 définit la position de l'arc
     float arc = abs(r - 0.55);
     
@@ -31,20 +29,18 @@ export const haloFrag = /* glsl */ `
     // Masque pour cacher l'intérieur du trou noir (r < 0.48)
     float holeMask = smoothstep(0.48, 0.52, r);
     
-    // On atténue fortement sur les côtés (là où c'est censé rejoindre le disque vu de côté)
-    // pour éviter des coupures nettes
+    // On atténue fortement sur les côtés 
     float sideFade = smoothstep(1.0, 0.2, abs(p.x));
 
     float finalIntensity = intensity * (0.6 + 0.4 * fall) * holeMask * sideFade;
 
-    // Couleur: Blanc/Jaune chaud qui vire au orangé sur les bords du sablier
-    vec3 coreColor = vec3(1.0, 0.95, 0.8); // Blanc chaud
-    vec3 edgeColor = vec3(1.0, 0.6, 0.1);  // Orange (comme le disque)
+
+    vec3 coreColor = vec3(1.0, 0.95, 0.8);
+    vec3 edgeColor = vec3(1.0, 0.6, 0.1);  
     
     // Plus on est proche du disque (y=0), plus on prend la couleur du disque
     vec3 color = mix(coreColor, edgeColor, exp(-abs(p.y) * 2.0));
     
-    // Boost lumineux
     color *= 1.5;
 
     float alpha = finalIntensity;

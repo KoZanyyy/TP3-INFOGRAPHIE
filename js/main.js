@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Point d'entrée de l'application Three.js.
+ * Gère l'initialisation de la scène, de la caméra, des contrôles,
+ * et orchestre la boucle de rendu principale (Game Loop).
+ */
+
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createBlackHole, updateBlackHole } from "./blackhole.js";
@@ -13,6 +19,11 @@ var curTime = Date.now();
 init();
 run();
 
+/**
+ * Initialise le moteur de rendu WebGL, la scène spatiale,
+ * la caméra, les contrôles orbitaux et les différents éléments 3D.
+ * Configure également les écouteurs d'événements (souris, redimensionnement).
+ */
 function init() {
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -33,7 +44,6 @@ function init() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.25;
 
-  // Background MilkyWay
   var path = "images/MilkyWay/";
   var format = ".jpg";
   var urls = [
@@ -63,6 +73,11 @@ function init() {
   });
 }
 
+/**
+ * Boucle d'animation principale (Game Loop).
+ * Met à jour le temps, les contrôles de caméra, projette la position
+ * de la souris en 3D, et délègue l'animation aux sous-systèmes.
+ */
 function run() {
   requestAnimationFrame(run);
 
@@ -71,6 +86,7 @@ function run() {
   curTime = now;
 
   controls.update();
+
   raycaster.setFromCamera(mouse, camera);
   raycaster.ray.intersectPlane(plane, mouseWorldPos);
 

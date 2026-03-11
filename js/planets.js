@@ -1,5 +1,11 @@
+/**
+ * @fileoverview Gestion du système planétaire.
+ * Gère l'instanciation, la physique orbitale, l'interaction à la souris
+ * et le processus destructif de spaghettification.
+ */
+
 import * as THREE from "three";
-import { bhParams } from "./blackhole.js"; // Import pour pouvoir le modifier
+import { bhParams } from "./blackhole.js";
 
 var planets = [];
 
@@ -9,6 +15,13 @@ var texturePaths = [
   "images/earth_specular_2048.jpg",
 ];
 
+/**
+ * Instancie un ensemble de planètes avec des textures aléatoires,
+ * les place sur des orbites circulaires initiales et leur attribue
+ * une vélocité de départ.
+ *
+ * @param {THREE.Scene} scene - La scène Three.js principale
+ */
 export function createPlanets(scene) {
   for (let i = 0; i < 3; i++) {
     var texture = new THREE.TextureLoader().load(texturePaths[i]);
@@ -34,8 +47,16 @@ export function createPlanets(scene) {
   }
 }
 
+/**
+ * Applique la physique et les logiques d'état à chaque planète à chaque frame.
+ * Calcule l'attraction gravitationnelle (proportionnelle à la masse du trou noir),
+ * la répulsion de la souris, gère les collisions aux limites (rebonds)
+ * et déclenche l'animation de spaghettification.
+ *
+ * @param {number} deltaTime - Temps écoulé depuis la dernière frame (en secondes)
+ * @param {THREE.Vector3} mouseWorldPos - Position spatiale de la souris projetée sur le plan Y=0
+ */
 export function updatePlanets(deltaTime, mouseWorldPos) {
-  // Le rayon effectif d'attraction dépend de l'échelle du trou noir
   let eventHorizonRadius = 2.5 * bhParams.currentScale;
 
   planets.forEach((p) => {
@@ -50,9 +71,7 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
       p.position.lerp(new THREE.Vector3(0, 0, 0), 0.08);
       p.material.opacity = Math.max(0, p.material.opacity - deltaTime);
 
-      // Si la planète est arrivée au centre, elle est mangée !
       if (p.position.length() < 1.0 * bhParams.currentScale) {
-        // Le trou noir grossit de 15% à chaque repas
         bhParams.targetScale += 0.15;
         respawnPlanet(p);
       }
@@ -62,7 +81,6 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
     let distToCenter = p.position.length();
     let dirToCenter = p.position.clone().negate().normalize();
 
-    // La gravité s'adapte à la taille (masse) du trou noir
     let gravityForce =
       (0.8 * bhParams.currentScale) / (distToCenter * distToCenter);
     p.userData.velocity.add(dirToCenter.multiplyScalar(gravityForce));
@@ -78,7 +96,7 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
 
     p.position.add(p.userData.velocity);
 
-    const LIMIT = 40; // Légèrement augmenté pour laisser de la place
+    const LIMIT = 40;
     if (p.position.x > LIMIT) {
       p.position.x = LIMIT;
       p.userData.velocity.x *= -0.5;
@@ -94,7 +112,6 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
       p.userData.velocity.z *= -0.5;
     }
 
-    // Déclenchement de la spaghettification adapté à la taille du trou noir
     if (distToCenter < eventHorizonRadius) {
       p.userData.spaghettifying = true;
       p.material.transparent = true;
@@ -102,6 +119,13 @@ export function updatePlanets(deltaTime, mouseWorldPos) {
   });
 }
 
+/**
+ * Réinitialise les propriétés géométriques et matérielles d'une planète
+ * après son absorption, et la replace sur une nouvelle orbite lointaine.
+ * La distance de respawn est adaptée à l'échelle courante du trou noir.
+ *
+ * @param {THREE.Mesh} p - L'objet Mesh représentant la planète à réinitialiser
+ */
 function respawnPlanet(p) {
   p.scale.set(1, 1, 1);
   p.material.opacity = 1;
@@ -110,7 +134,6 @@ function respawnPlanet(p) {
   p.userData.eaten = false;
 
   let angle = Math.random() * Math.PI * 2;
-  // Fait respawn la planète plus loin si le trou noir est devenu gros
   let baseDist = 15 * Math.max(1.0, bhParams.targetScale * 0.8);
   let dist = baseDist + Math.random() * 10;
 

@@ -44,10 +44,10 @@ export const diskFrag = /* glsl */ `
 
     float density = mix(f, f2, 0.4);
 
-    // MODIFIÉ : palette plus jaune/dorée
-    vec3 coreColor  = vec3(1.0,  0.95, 0.6);   // jaune vif quasi blanc
-    vec3 midColor   = vec3(1.0,  0.75, 0.1);   // jaune-orange saturé
-    vec3 outerColor = vec3(0.6,  0.2,  0.02);  // orange-brun foncé
+
+    vec3 coreColor  = vec3(1.0,  0.95, 0.6);   
+    vec3 midColor   = vec3(1.0,  0.75, 0.1);   
+    vec3 outerColor = vec3(0.6,  0.2,  0.02);  
 
     vec3 color = mix(coreColor,  midColor,   smoothstep(0.0, 0.45, r));
     color      = mix(color,      outerColor, smoothstep(0.45, 1.0, r));
